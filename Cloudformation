@@ -1,0 +1,179 @@
+{
+    "AWSTemplateFormatVersion" : "2010-09-09",
+
+    "Description" : "AWS CloudFormation Sample Template AutoScalingMultiAZWithNotifications: Create a multi-az, load balanced and Auto Scaled sample web site running on an Apache Web Server. The application is configured to span all Availability Zones in the region and is Auto-Scaled based on the CPU utilization of the web servers. Notifications will be sent to the operator email address on scaling events. The instances are load balanced with a simple health check against the default web page. **WARNING** This template creates one or more Amazon EC2 instances and an Elastic Load Balancer. You will be billed for the AWS resources used if you create a stack from this template.",
+
+    "Parameters" : {
+        "OperatorEMail": {
+            "Description": "EMail address to notify if there are any scaling operations",
+            "Type": "String",
+            "AllowedPattern": "([a-zA-Z0-9_\\-\\.]+)@((\\[[0-9]{1,3}\\.[0-9]{1,3}\\.[0-9]{1,3}\\.)|(([a-zA-Z0-9\\-]+\\.)+))([a-zA-Z]{2,4}|[0-9]{1,3})(\\]?)",
+            "ConstraintDescription": "must be a valid email address."
+        },
+
+        "KeyName" : {
+            "Description" : "The EC2 Key Pair to allow SSH access to the instances",
+            "Type" : "AWS::EC2::KeyPair::KeyName",
+            "ConstraintDescription" : "must be the name of an existing EC2 KeyPair."
+        }
+    },
+ 
+    "Resources" : {
+        "NotificationTopic": {
+            "Type": "AWS::SNS::Topic",
+            "Properties": {
+                "Subscription": [ { "Endpoint": { "Ref": "OperatorEMail" }, "Protocol": "email" } ]
+            }
+        },
+
+        "WebServerGroup" : {
+            "Type" : "AWS::AutoScaling::AutoScalingGroup",
+            "Properties" : {
+                "AvailabilityZones" : { "Fn::GetAZs" : ""},
+                "LaunchConfigurationName" : { "Ref" : "LaunchConfig" },
+                "MinSize" : "1",
+                "MaxSize" : "1",
+                "LoadBalancerNames" : [ { "Ref" : "ElasticLoadBalancer" } ],
+                "NotificationConfiguration" : {
+                    "TopicARN" : { "Ref" : "NotificationTopic" },
+                    "NotificationTypes" : [ 
+                        "autoscaling:EC2_INSTANCE_LAUNCH",
+                        "autoscaling:EC2_INSTANCE_LAUNCH_ERROR",
+                        "autoscaling:EC2_INSTANCE_TERMINATE",
+                        "autoscaling:EC2_INSTANCE_TERMINATE_ERROR" 
+                    ]
+                }
+            },
+            "CreationPolicy" : {
+                "ResourceSignal" : {
+                    "Timeout" : "PT15M",
+                    "Count"   : "1"
+                }
+            },
+            "UpdatePolicy": {
+                "AutoScalingRollingUpdate": {
+                    "MinInstancesInService": "1",
+                    "MaxBatchSize": "1",
+                    "PauseTime" : "PT15M",
+                    "WaitOnResourceSignals": "true"
+                }
+            }
+        },
+
+    "LaunchConfig" : {
+        "Type" : "AWS::AutoScaling::LaunchConfiguration",
+        "Properties" : {
+            "KeyName" : { "Ref" : "KeyName" },
+            "ImageId" : "ami-0f2176987ee50226e",
+            "SecurityGroups" : [ { "Ref" : "InstanceSecurityGroup" } ],
+            "InstanceType" : "t2.small"
+        }
+    },
+
+    "WebServerScaleUpPolicy" : {
+        "Type" : "AWS::AutoScaling::ScalingPolicy",
+        "Properties" : {
+            "AdjustmentType" : "ChangeInCapacity",
+            "AutoScalingGroupName" : { "Ref" : "WebServerGroup" },
+            "Cooldown" : "60",
+            "ScalingAdjustment" : "1"
+        }
+    },
+    "WebServerScaleDownPolicy" : {
+        "Type" : "AWS::AutoScaling::ScalingPolicy",
+        "Properties" : {
+            "AdjustmentType" : "ChangeInCapacity",
+            "AutoScalingGroupName" : { "Ref" : "WebServerGroup" },
+            "Cooldown" : "60",
+            "ScalingAdjustment" : "-1"
+        }
+    },
+
+    "CPUAlarmHigh": {
+        "Type": "AWS::CloudWatch::Alarm",
+        "Properties": {
+            "AlarmDescription": "Scale-up if CPU > 90% for 10 minutes",
+            "MetricName": "CPUUtilization",
+            "Namespace": "AWS/EC2",
+            "Statistic": "Average",
+            "Period": "300",
+            "EvaluationPeriods": "2",
+            "Threshold": "90",
+            "AlarmActions": [ { "Ref": "WebServerScaleUpPolicy" } ],
+            "Dimensions": [
+                {
+                    "Name": "AutoScalingGroupName",
+                    "Value": { "Ref": "WebServerGroup" }
+                }
+            ],
+            "ComparisonOperator": "GreaterThanThreshold"
+        }
+    },
+    "CPUAlarmLow": {
+        "Type": "AWS::CloudWatch::Alarm",
+        "Properties": {
+            "AlarmDescription": "Scale-down if CPU < 70% for 10 minutes",
+            "MetricName": "CPUUtilization",
+            "Namespace": "AWS/EC2",
+            "Statistic": "Average",
+            "Period": "300",
+            "EvaluationPeriods": "2",
+            "Threshold": "70",
+            "AlarmActions": [ { "Ref": "WebServerScaleDownPolicy" } ],
+            "Dimensions": [
+                {
+                    "Name": "AutoScalingGroupName",
+                    "Value": { "Ref": "WebServerGroup" }
+                }
+            ],
+            "ComparisonOperator": "LessThanThreshold"
+        }
+    },
+
+    "ElasticLoadBalancer" : {
+      "Type" : "AWS::ElasticLoadBalancing::LoadBalancer",
+      "Properties" : {
+        "AvailabilityZones" : { "Fn::GetAZs" : "" },
+        "CrossZone" : "true",
+        "Listeners" : [ {
+            "LoadBalancerPort" : "443",
+            "InstancePort" : "3000",
+            "Protocol" : "HTTPS"
+        }],
+        "HealthCheck" : {
+            "Target" : "HTTP:3000/",
+            "HealthyThreshold" : "3",
+            "UnhealthyThreshold" : "5",
+            "Interval" : "30",
+            "Timeout" : "5"
+        }
+      }
+    },
+
+    "InstanceSecurityGroup" : {
+        "Type" : "AWS::EC2::SecurityGroup",
+        "Properties" : {
+            "GroupDescription" : "Enable SSH access and HTTPS",
+            "SecurityGroupIngress" : [{
+                    "IpProtocol" : "tcp",
+                    "FromPort" : "22",
+                    "ToPort" : "22",
+                    "CidrIp" : "0.0.0.0/0"
+                },
+                {
+                    "IpProtocol" : "tcp",
+                    "FromPort" : "443",
+                    "ToPort" : "3000",
+                    "CidrIp" : "0.0.0.0/0"
+                } 
+            ]}
+        }
+    },
+
+    "Outputs" : {
+        "URL" : {
+            "Description" : "The URL of the website",
+            "Value" :  { "Fn::Join" : [ "", [ "http://", { "Fn::GetAtt" : [ "ElasticLoadBalancer", "DNSName" ]}]]}
+        }
+    }
+}
