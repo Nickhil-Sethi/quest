@@ -44,16 +44,16 @@
                 "Comment":"Initializing",
                 "AWS::CloudFormation::Init" : {
                     "configSets" : {
-                    "Install" : [ "Install" ]
+                        "Install" : [ "Install" ]
+                    }
                 },
-
                 "Install" : {
                     "packages" : {},
                     "yum" : {
                         "docker": []
                     }
                 }
-            }
+            },
             "Properties" : {
                 "AvailabilityZones" : { "Fn::GetAZs" : ""},
                 "LaunchConfigurationName" : { "Ref" : "LaunchConfig" },
