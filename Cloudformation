@@ -2,7 +2,7 @@
     "AWSTemplateFormatVersion" : "2010-09-09",
 
     "Description" : "Rearc quest CloudFormation stack",
-    
+
     "Parameters" : {
         "OperatorEMail": {
             "Description": "EMail address to notify if there are any scaling operations",
@@ -23,18 +23,6 @@
             "Type": "AWS::SNS::Topic",
             "Properties": {
                 "Subscription": [ { "Endpoint": { "Ref": "OperatorEMail" }, "Protocol": "email" } ]
-            }
-        },
-
-        "Certificate": {
-            "Type" : "AWS::CertificateManager::Certificate",
-            "Properties" : {
-                "DomainName" : { "Fn::Join" : [ "", [ { "Fn::GetAtt" : [ "ElasticLoadBalancer", "DNSName" ]}]]},
-                "DomainValidationOptions" : [ {
-                    "DomainName" : { "Fn::Join" : [ "", [ { "Fn::GetAtt" : [ "ElasticLoadBalancer", "DNSName" ]}]]},
-                    "ValidationDomain" : { "Ref": "OperatorEMail" }
-                } ],
-                "ValidationMethod" : "email"
             }
         },
 
@@ -176,9 +164,9 @@
                 "AvailabilityZones" : { "Fn::GetAZs" : "" },
                 "CrossZone" : "true",
                 "Listeners" : [ {
-                    "LoadBalancerPort" : "443",
+                    "LoadBalancerPort" : "80",
                     "InstancePort" : "3000",
-                    "Protocol" : "HTTPS"
+                    "Protocol" : "HTTP"
                 }],
                 "HealthCheck" : {
                     "Target" : "HTTP:3000/",
@@ -193,7 +181,7 @@
         "InstanceSecurityGroup" : {
             "Type" : "AWS::EC2::SecurityGroup",
             "Properties" : {
-                "GroupDescription" : "Enable SSH access and HTTPS",
+                "GroupDescription" : "Enable SSH access and HTTP",
                 "SecurityGroupIngress" : [{
                         "IpProtocol" : "tcp",
                         "FromPort" : "22",
@@ -202,7 +190,7 @@
                     },
                     {
                         "IpProtocol" : "tcp",
-                        "FromPort" : "443",
+                        "FromPort" : "80",
                         "ToPort" : "3000",
                         "CidrIp" : "0.0.0.0/0"
                     } 
