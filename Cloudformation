@@ -26,8 +26,34 @@
             }
         },
 
+        "Certificate": {
+            "Type" : "AWS::CertificateManager::Certificate",
+            "Properties" : {
+                "DomainName" : { "Fn::Join" : [ "", [ { "Fn::GetAtt" : [ "ElasticLoadBalancer", "DNSName" ]}]]},
+                "DomainValidationOptions" : [ {
+                    "DomainName" : { "Fn::Join" : [ "", [ { "Fn::GetAtt" : [ "ElasticLoadBalancer", "DNSName" ]}]]},
+                    "ValidationDomain" : { "Ref": "OperatorEMail" }
+                } ],
+                "ValidationMethod" : "email"
+            }
+        },
+
         "WebServerGroup" : {
             "Type" : "AWS::AutoScaling::AutoScalingGroup",
+            "Metadata": {
+                "Comment":"Initializing",
+                "AWS::CloudFormation::Init" : {
+                    "configSets" : {
+                    "Install" : [ "Install" ]
+                },
+
+                "Install" : {
+                    "packages" : {},
+                    "yum" : {
+                        "docker": []
+                    }
+                }
+            }
             "Properties" : {
                 "AvailabilityZones" : { "Fn::GetAZs" : ""},
                 "LaunchConfigurationName" : { "Ref" : "LaunchConfig" },
@@ -60,115 +86,130 @@
             }
         },
 
-    "LaunchConfig" : {
-        "Type" : "AWS::AutoScaling::LaunchConfiguration",
-        "Properties" : {
-            "KeyName" : { "Ref" : "KeyName" },
-            "ImageId" : "ami-0f2176987ee50226e",
-            "SecurityGroups" : [ { "Ref" : "InstanceSecurityGroup" } ],
-            "InstanceType" : "t2.small"
-        }
-    },
+        "LaunchConfig" : {
+            "Type" : "AWS::AutoScaling::LaunchConfiguration",
+            "Properties" : {
+                "KeyName" : { "Ref" : "KeyName" },
+                "ImageId" : "ami-0f2176987ee50226e",
+                "SecurityGroups" : [ { "Ref" : "InstanceSecurityGroup" } ],
+                "InstanceType" : "t2.small",
+                "UserData"       : { "Fn::Base64" : { "Fn::Join" : ["", [
+                    "#!/bin/bash -xe\n",
+                    "yum install -y aws-cfn-bootstrap\n",
 
-    "WebServerScaleUpPolicy" : {
-        "Type" : "AWS::AutoScaling::ScalingPolicy",
-        "Properties" : {
-            "AdjustmentType" : "ChangeInCapacity",
-            "AutoScalingGroupName" : { "Ref" : "WebServerGroup" },
-            "Cooldown" : "60",
-            "ScalingAdjustment" : "1"
-        }
-    },
-    "WebServerScaleDownPolicy" : {
-        "Type" : "AWS::AutoScaling::ScalingPolicy",
-        "Properties" : {
-            "AdjustmentType" : "ChangeInCapacity",
-            "AutoScalingGroupName" : { "Ref" : "WebServerGroup" },
-            "Cooldown" : "60",
-            "ScalingAdjustment" : "-1"
-        }
-    },
+                    "# Install the files and packages from the metadata\n",
+                    "/opt/aws/bin/cfn-init -v ",
+                    "         --stack ", { "Ref" : "AWS::StackName" },
+                    "         --resource WebServerGroup",
+                    "         --configsets Install ",
+                    "         --region ", { "Ref" : "AWS::Region" }, "\n",
+                    "docker pull nickhilsethi/quest", "\n",
+                    "docker run -p 3000:3000 nickhilsethi/quest"
+                ]]}}
+            }
+        },
 
-    "CPUAlarmHigh": {
-        "Type": "AWS::CloudWatch::Alarm",
-        "Properties": {
-            "AlarmDescription": "Scale-up if CPU > 90% for 10 minutes",
-            "MetricName": "CPUUtilization",
-            "Namespace": "AWS/EC2",
-            "Statistic": "Average",
-            "Period": "300",
-            "EvaluationPeriods": "2",
-            "Threshold": "90",
-            "AlarmActions": [ { "Ref": "WebServerScaleUpPolicy" } ],
-            "Dimensions": [
-                {
-                    "Name": "AutoScalingGroupName",
-                    "Value": { "Ref": "WebServerGroup" }
+        "WebServerScaleUpPolicy" : {
+            "Type" : "AWS::AutoScaling::ScalingPolicy",
+            "Properties" : {
+                "AdjustmentType" : "ChangeInCapacity",
+                "AutoScalingGroupName" : { "Ref" : "WebServerGroup" },
+                "Cooldown" : "60",
+                "ScalingAdjustment" : "1"
+            }
+        },
+        "WebServerScaleDownPolicy" : {
+            "Type" : "AWS::AutoScaling::ScalingPolicy",
+            "Properties" : {
+                "AdjustmentType" : "ChangeInCapacity",
+                "AutoScalingGroupName" : { "Ref" : "WebServerGroup" },
+                "Cooldown" : "60",
+                "ScalingAdjustment" : "-1"
+            }
+        },
+
+        "CPUAlarmHigh": {
+            "Type": "AWS::CloudWatch::Alarm",
+            "Properties": {
+                "AlarmDescription": "Scale-up if CPU > 90% for 10 minutes",
+                "MetricName": "CPUUtilization",
+                "Namespace": "AWS/EC2",
+                "Statistic": "Average",
+                "Period": "300",
+                "EvaluationPeriods": "2",
+                "Threshold": "90",
+                "AlarmActions": [ { "Ref": "WebServerScaleUpPolicy" } ],
+                "Dimensions": [
+                    {
+                        "Name": "AutoScalingGroupName",
+                        "Value": { "Ref": "WebServerGroup" }
+                    }
+                ],
+                "ComparisonOperator": "GreaterThanThreshold"
+            }
+        },
+
+        "CPUAlarmLow": {
+            "Type": "AWS::CloudWatch::Alarm",
+            "Properties": {
+                "AlarmDescription": "Scale-down if CPU < 70% for 10 minutes",
+                "MetricName": "CPUUtilization",
+                "Namespace": "AWS/EC2",
+                "Statistic": "Average",
+                "Period": "300",
+                "EvaluationPeriods": "2",
+                "Threshold": "70",
+                "AlarmActions": [ { "Ref": "WebServerScaleDownPolicy" } ],
+                "Dimensions": [
+                    {
+                        "Name": "AutoScalingGroupName",
+                        "Value": { "Ref": "WebServerGroup" }
+                    }
+                ],
+                "ComparisonOperator": "LessThanThreshold"
+            }
+        },
+
+        "ElasticLoadBalancer" : {
+            "Type" : "AWS::ElasticLoadBalancing::LoadBalancer",
+            "Properties" : {
+                "AvailabilityZones" : { "Fn::GetAZs" : "" },
+                "CrossZone" : "true",
+                "Listeners" : [ {
+                    "LoadBalancerPort" : "443",
+                    "InstancePort" : "3000",
+                    "Protocol" : "HTTPS"
+                }],
+                "HealthCheck" : {
+                    "Target" : "HTTP:3000/",
+                    "HealthyThreshold" : "3",
+                    "UnhealthyThreshold" : "5",
+                    "Interval" : "30",
+                    "Timeout" : "5"
                 }
-            ],
-            "ComparisonOperator": "GreaterThanThreshold"
-        }
-    },
-    "CPUAlarmLow": {
-        "Type": "AWS::CloudWatch::Alarm",
-        "Properties": {
-            "AlarmDescription": "Scale-down if CPU < 70% for 10 minutes",
-            "MetricName": "CPUUtilization",
-            "Namespace": "AWS/EC2",
-            "Statistic": "Average",
-            "Period": "300",
-            "EvaluationPeriods": "2",
-            "Threshold": "70",
-            "AlarmActions": [ { "Ref": "WebServerScaleDownPolicy" } ],
-            "Dimensions": [
-                {
-                    "Name": "AutoScalingGroupName",
-                    "Value": { "Ref": "WebServerGroup" }
-                }
-            ],
-            "ComparisonOperator": "LessThanThreshold"
-        }
-    },
+            }
+        },
 
-    "ElasticLoadBalancer" : {
-      "Type" : "AWS::ElasticLoadBalancing::LoadBalancer",
-      "Properties" : {
-        "AvailabilityZones" : { "Fn::GetAZs" : "" },
-        "CrossZone" : "true",
-        "Listeners" : [ {
-            "LoadBalancerPort" : "443",
-            "InstancePort" : "3000",
-            "Protocol" : "HTTPS"
-        }],
-        "HealthCheck" : {
-            "Target" : "HTTP:3000/",
-            "HealthyThreshold" : "3",
-            "UnhealthyThreshold" : "5",
-            "Interval" : "30",
-            "Timeout" : "5"
+        "InstanceSecurityGroup" : {
+            "Type" : "AWS::EC2::SecurityGroup",
+            "Properties" : {
+                "GroupDescription" : "Enable SSH access and HTTPS",
+                "SecurityGroupIngress" : [{
+                        "IpProtocol" : "tcp",
+                        "FromPort" : "22",
+                        "ToPort" : "22",
+                        "CidrIp" : "0.0.0.0/0"
+                    },
+                    {
+                        "IpProtocol" : "tcp",
+                        "FromPort" : "443",
+                        "ToPort" : "3000",
+                        "CidrIp" : "0.0.0.0/0"
+                    } 
+                ]}
+            }
         }
-      }
-    },
-
-    "InstanceSecurityGroup" : {
-        "Type" : "AWS::EC2::SecurityGroup",
-        "Properties" : {
-            "GroupDescription" : "Enable SSH access and HTTPS",
-            "SecurityGroupIngress" : [{
-                    "IpProtocol" : "tcp",
-                    "FromPort" : "22",
-                    "ToPort" : "22",
-                    "CidrIp" : "0.0.0.0/0"
-                },
-                {
-                    "IpProtocol" : "tcp",
-                    "FromPort" : "443",
-                    "ToPort" : "3000",
-                    "CidrIp" : "0.0.0.0/0"
-                } 
-            ]}
-        }
-    },
+    }
 
     "Outputs" : {
         "URL" : {
