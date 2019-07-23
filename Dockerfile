@@ -10,5 +10,8 @@ WORKDIR /app
 # build the application
 RUN npm install
 
+# set environment variable
+ENV SECRET_WORD=TwelveFactor
+
 # start the application
 CMD npm start
