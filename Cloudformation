@@ -28,20 +28,6 @@
 
         "WebServerGroup" : {
             "Type" : "AWS::AutoScaling::AutoScalingGroup",
-            "Metadata": {
-                "Comment":"Initializing",
-                "AWS::CloudFormation::Init" : {
-                    "configSets" : {
-                        "Install" : [ "Install" ]
-                    }
-                },
-                "Install" : {
-                    "packages" : {},
-                    "yum" : {
-                        "docker": []
-                    }
-                }
-            },
             "Properties" : {
                 "AvailabilityZones" : { "Fn::GetAZs" : ""},
                 "LaunchConfigurationName" : { "Ref" : "LaunchConfig" },
@@ -59,17 +45,21 @@
                 }
             },
             "CreationPolicy" : {
-                "ResourceSignal" : {
-                    "Timeout" : "PT15M",
-                    "Count"   : "1"
+                "AutoScalingCreationPolicy": {
+                    "MinSuccessfulInstancesPercent": "0"
+                },
+                "ResourceSignal": {
+                    "Count": "1",
+                    "Timeout": "PT1M"
                 }
             },
+
             "UpdatePolicy": {
                 "AutoScalingRollingUpdate": {
                     "MinInstancesInService": "1",
                     "MaxBatchSize": "1",
-                    "PauseTime" : "PT15M",
-                    "WaitOnResourceSignals": "true"
+                    "PauseTime" : "PT1M",
+                    "WaitOnResourceSignals": "false"
                 }
             }
         },
@@ -81,18 +71,16 @@
                 "ImageId" : "ami-0f2176987ee50226e",
                 "SecurityGroups" : [ { "Ref" : "InstanceSecurityGroup" } ],
                 "InstanceType" : "t2.small",
-                "UserData"       : { "Fn::Base64" : { "Fn::Join" : ["", [
+                "UserData" : { "Fn::Base64" : { "Fn::Join" : ["", [
                     "#!/bin/bash -xe\n",
-                    "yum install -y aws-cfn-bootstrap\n",
-
-                    "# Install the files and packages from the metadata\n",
-                    "/opt/aws/bin/cfn-init -v ",
-                    "         --stack ", { "Ref" : "AWS::StackName" },
-                    "         --resource WebServerGroup",
-                    "         --configsets Install ",
-                    "         --region ", { "Ref" : "AWS::Region" }, "\n",
-                    "docker pull nickhilsethi/quest", "\n",
-                    "docker run -p 3000:3000 nickhilsethi/quest"
+                    "touch nickhilwashere\n",
+                    "sudo yum install -y aws-cfn-bootstrap\n",
+                    "sudo yum install -y docker\n",
+                    "sudo service docker start\n",
+                    "sudo docker pull nickhilsethi/quest\n",
+                    "sudo service docker restart\n",
+                    "sudo docker run -p 3000:3000 nickhilsethi/quest\n",
+                    "touch nickhilwashere_too\n"
                 ]]}}
             }
         },
