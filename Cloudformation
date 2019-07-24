@@ -73,14 +73,13 @@
                 "InstanceType" : "t2.small",
                 "UserData" : { "Fn::Base64" : { "Fn::Join" : ["", [
                     "#!/bin/bash -xe\n",
-                    "touch nickhilwashere\n",
                     "sudo yum install -y aws-cfn-bootstrap\n",
                     "sudo yum install -y docker\n",
                     "sudo service docker start\n",
                     "sudo docker pull nickhilsethi/quest\n",
                     "sudo service docker restart\n",
                     "sudo docker run -p 3000:3000 nickhilsethi/quest\n",
-                    "touch nickhilwashere_too\n"
+                    "sudo cfn-signal --success\n"
                 ]]}}
             }
         },
