@@ -79,7 +79,17 @@
                     "sudo docker pull nickhilsethi/quest\n",
                     "sudo service docker restart\n",
                     "sudo docker run -p 3000:3000 nickhilsethi/quest\n",
-                    "sudo cfn-signal --success\n"
+                    "cfn-signal --success true ",
+                    "         --stack ",
+                    {
+                        "Ref": "AWS::StackName"
+                    },
+                    "         --resource WebServerGroup ",
+                    "         --region ",
+                    {
+                        "Ref": "AWS::Region"
+                    },
+                    "\n"
                 ]]}}
             }
         },
